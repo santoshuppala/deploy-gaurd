@@ -1,0 +1,43 @@
+# Simple Spark-to-Spark Validation Example
+# This example shows a basic row count validation between two Spark tables
+
+connections:
+  - name: source_spark
+    type: spark
+    enabled: true
+    config:
+      app_name: "Simple Validation"
+      master: "local[*]"
+
+  - name: target_spark
+    type: spark
+    enabled: true
+    config:
+      app_name: "Simple Validation"
+      master: "local[*]"
+
+validations:
+  - name: "Simple Row Count Check"
+    type: row_count
+    enabled: true
+    source: source_spark
+    target: target_spark
+    source_query: "SELECT COUNT(*) FROM source_table"
+    target_query: "SELECT COUNT(*) FROM target_table"
+    thresholds:
+      max_difference_percent: 1.0
+      fail_on_zero_source: true
+
+reporters:
+  - type: console
+    enabled: true
+    config:
+      verbose: true
+
+  - type: json
+    enabled: true
+    output_path: "output/json/simple_results.json"
+
+settings:
+  log_level: "INFO"
+  continue_on_error: true

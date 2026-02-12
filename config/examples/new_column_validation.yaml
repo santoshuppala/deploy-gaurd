@@ -1,0 +1,238 @@
+# New Column Validation Configuration Examples
+# Validates newly added columns with comprehensive checks
+
+connections:
+  - name: source_db
+    type: spark
+    enabled: true
+    config:
+      app_name: "New Column Validation"
+      master: "local[*]"
+
+  - name: target_db
+    type: hive
+    enabled: true
+    config:
+      host: "${HIVE_HOST:localhost}"
+      port: 10000
+      database: "production"
+      username: "${HIVE_USER}"
+      password: "${HIVE_PASSWORD}"
+
+validations:
+  # Scenario 1: Simple new column addition
+  - name: "Basic New Column Validation"
+    type: new_column
+    enabled: true
+    source: source_db
+    target: target_db
+    source_table: "customers"
+    target_table: "production.customers_enhanced"
+    metadata:
+      new_columns:
+        # New column: customer_segment (added during ETL)
+        - name: "customer_segment"
+          expected_type: "string"
+          nullable: false
+          allowed_values: ["Premium", "Standard", "Basic"]
+          description: "Customer segmentation added by ML model"
+
+        # New column: last_purchase_date
+        - name: "last_purchase_date"
+          expected_type: "date"
+          nullable: true
+          max_null_percent: 20.0  # Allow up to 20% nulls for new customers
+          description: "Most recent purchase date"
+
+  # Scenario 2: New columns with default values
+  - name: "New Columns with Defaults"
+    type: new_column
+    enabled: true
+    source: source_db
+    target: target_db
+    source_query: "SELECT * FROM orders"
+    target_query: "SELECT * FROM production.orders_enriched"
+    metadata:
+      new_columns:
+        # Status column with default
+        - name: "processing_status"
+          expected_type: "string"
+          nullable: false
+          default_value: "PENDING"
+          min_default_percent: 80.0  # At least 80% should have default
+          allowed_values: ["PENDING", "PROCESSING", "COMPLETED", "FAILED"]
+
+        # Audit timestamp
+        - name: "etl_processed_timestamp"
+          expected_type: "timestamp"
+          nullable: false
+          description: "ETL processing timestamp"
+
+        # Data quality score
+        - name: "data_quality_score"
+          expected_type: "double"
+          nullable: true
+          min_value: 0.0
+          max_value: 100.0
+          description: "Quality score between 0-100"
+
+  # Scenario 3: Derived/calculated columns
+  - name: "Derived Column Validation"
+    type: new_column
+    enabled: true
+    source: source_db
+    target: target_db
+    source_table: "transactions"
+    target_table: "production.transactions_analyzed"
+    metadata:
+      new_columns:
+        # Calculated field: total_with_tax
+        - name: "total_with_tax"
+          expected_type: "decimal"
+          nullable: false
+          min_value: 0.0
+          description: "Total amount including tax"
+
+        # Flag column: is_high_value
+        - name: "is_high_value"
+          expected_type: "boolean"
+          nullable: false
+          default_value: false
+          description: "Flag for high-value transactions"
+
+        # Category enrichment
+        - name: "product_category_enriched"
+          expected_type: "string"
+          nullable: true
+          max_null_percent: 5.0
+          pattern: "^[A-Z]{2,3}-[0-9]{4}$"  # Format: CAT-1234
+          min_pattern_match_percent: 95.0
+          description: "Enriched product category code"
+
+  # Scenario 4: Schema evolution - multiple new columns
+  - name: "Schema Evolution Validation"
+    type: new_column
+    enabled: true
+    source: source_db
+    target: target_db
+    source_table: "users"
+    target_table: "production.users_v2"
+    thresholds:
+      max_null_percent: 10.0  # Global threshold
+    metadata:
+      new_columns:
+        # Privacy compliance fields
+        - name: "gdpr_consent"
+          expected_type: "boolean"
+          nullable: false
+          default_value: false
+          description: "GDPR consent flag"
+
+        - name: "consent_date"
+          expected_type: "timestamp"
+          nullable: true
+          max_null_percent: 50.0
+          description: "Date of consent"
+
+        # Geolocation enrichment
+        - name: "country_code"
+          expected_type: "string"
+          nullable: true
+          pattern: "^[A-Z]{2}$"  # ISO 2-letter code
+          min_pattern_match_percent: 98.0
+          description: "ISO country code"
+
+        - name: "timezone"
+          expected_type: "string"
+          nullable: true
+          allowed_values:
+            - "UTC"
+            - "America/New_York"
+            - "America/Los_Angeles"
+            - "Europe/London"
+            - "Asia/Tokyo"
+          description: "User timezone"
+
+        # Account status fields
+        - name: "account_tier"
+          expected_type: "integer"
+          nullable: false
+          default_value: 1
+          min_value: 1
+          max_value: 5
+          description: "Account tier (1-5)"
+
+        - name: "loyalty_points"
+          expected_type: "integer"
+          nullable: false
+          default_value: 0
+          min_value: 0
+          description: "Accumulated loyalty points"
+
+  # Scenario 5: ETL pipeline - incremental columns
+  - name: "ETL Pipeline New Columns"
+    type: new_column
+    enabled: true
+    source: source_db
+    target: target_db
+    source_query: "SELECT * FROM raw_events WHERE date = '${PROCESSING_DATE}'"
+    target_query: "SELECT * FROM production.processed_events WHERE date = '${PROCESSING_DATE}'"
+    metadata:
+      new_columns:
+        # Pipeline metadata
+        - name: "pipeline_run_id"
+          expected_type: "string"
+          nullable: false
+          pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          min_pattern_match_percent: 100.0
+          description: "UUID of pipeline run"
+
+        - name: "data_source"
+          expected_type: "string"
+          nullable: false
+          allowed_values: ["API", "File", "Stream", "Manual"]
+          description: "Origin of the data"
+
+        - name: "validation_errors"
+          expected_type: "string"
+          nullable: true
+          max_null_percent: 95.0  # Most records should pass validation
+          description: "Validation error messages if any"
+
+        # Data quality indicators
+        - name: "completeness_score"
+          expected_type: "double"
+          nullable: false
+          min_value: 0.0
+          max_value: 1.0
+          description: "Data completeness score (0-1)"
+
+        - name: "anomaly_detected"
+          expected_type: "boolean"
+          nullable: false
+          default_value: false
+          description: "Anomaly detection flag"
+
+reporters:
+  - type: console
+    enabled: true
+    config:
+      verbose: true
+      color_output: true
+
+  - type: json
+    enabled: true
+    output_path: "output/json/new_column_validation_results.json"
+    config:
+      indent: 2
+
+  - type: html
+    enabled: true
+    output_path: "output/reports/new_column_validation_report.html"
+    config:
+      include_charts: true
+
+settings:
+  log_level: "INFO"
+  continue_on_error: true
+  log_file: "output/logs/new_column_validation.log"

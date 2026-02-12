@@ -1,0 +1,78 @@
+# S3 to Hive Validation Example
+# Validates data migration from S3 to Hive tables
+
+connections:
+  - name: s3_source
+    type: s3
+    enabled: true
+    config:
+      bucket: "${S3_BUCKET}"
+      region: "us-east-1"
+      access_key: "${AWS_ACCESS_KEY_ID}"
+      secret_key: "${AWS_SECRET_ACCESS_KEY}"
+
+  - name: hive_target
+    type: hive
+    enabled: true
+    config:
+      host: "${HIVE_HOST:localhost}"
+      port: 10000
+      database: "production"
+      username: "${HIVE_USER}"
+      password: "${HIVE_PASSWORD}"
+
+validations:
+  # Row count validation
+  - name: "Customer Data Row Count"
+    type: row_count
+    enabled: true
+    source: s3_source
+    target: hive_target
+    source_query: "s3://my-bucket/customers/*.parquet"
+    target_query: "SELECT COUNT(*) FROM production.customers"
+    thresholds:
+      max_difference_percent: 0.5
+      fail_on_zero_source: true
+      fail_on_zero_target: true
+
+  # Schema validation
+  - name: "Customer Schema Validation"
+    type: schema
+    enabled: true
+    source: s3_source
+    target: hive_target
+    source_query: "s3://my-bucket/customers/*.parquet"
+    target_table: "production.customers"
+    metadata:
+      critical_columns: ["customer_id", "email", "created_date"]
+
+  # Data quality check
+  - name: "Customer Data Quality"
+    type: data_quality
+    enabled: true
+    source: s3_source
+    target: hive_target
+    source_query: "s3://my-bucket/customers/*.parquet"
+    target_query: "SELECT * FROM production.customers"
+    thresholds:
+      max_null_percent: 2.0
+      max_duplicate_percent: 0.5
+
+reporters:
+  - type: console
+    enabled: true
+
+  - type: json
+    enabled: true
+    output_path: "output/json/s3_to_hive_results.json"
+
+  - type: html
+    enabled: true
+    output_path: "output/reports/s3_to_hive_report.html"
+    config:
+      include_charts: true
+
+settings:
+  log_level: "INFO"
+  query_timeout_seconds: 600
+  continue_on_error: true

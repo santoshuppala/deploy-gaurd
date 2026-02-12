@@ -1,0 +1,192 @@
+1# Pre/Post Deployment Validation Configuration
+# This is the main configuration template for the validation framework
+
+# Data Source Connections
+connections:
+  # Spark Connection Example
+  - name: spark_source
+    type: spark
+    enabled: true
+    config:
+      app_name: "Validation Framework"
+      master: "local[*]"  # or yarn, spark://host:port
+      # spark_home: "${SPARK_HOME}"
+      # config:
+      #   spark.sql.adaptive.enabled: "true"
+      #   spark.sql.warehouse.dir: "/user/hive/warehouse"
+
+  # Hive Connection Example
+  - name: hive_target
+    type: hive
+    enabled: true
+    config:
+      host: "${HIVE_HOST:localhost}"
+      port: ${HIVE_PORT:10000}
+      database: "default"
+      username: "${HIVE_USER}"
+      password: "${HIVE_PASSWORD}"
+      auth_mechanism: "PLAIN"
+
+  # S3 Connection Example
+  - name: s3_data
+    type: s3
+    enabled: false
+    config:
+      bucket: "${S3_BUCKET:my-data-bucket}"
+      region: "${AWS_REGION:us-east-1}"
+      access_key: "${AWS_ACCESS_KEY_ID}"
+      secret_key: "${AWS_SECRET_ACCESS_KEY}"
+      # prefix: "data/processed/"
+
+  # Azure ADLS Connection Example
+  - name: adls_data
+    type: adls
+    enabled: false
+    config:
+      account_name: "${ADLS_ACCOUNT_NAME}"
+      account_key: "${ADLS_ACCOUNT_KEY}"
+      container: "${ADLS_CONTAINER:data}"
+      # file_system: "datalake"
+
+  # GCS Connection Example
+  - name: gcs_data
+    type: gcs
+    enabled: false
+    config:
+      bucket: "${GCS_BUCKET:my-gcs-bucket}"
+      project_id: "${GCP_PROJECT_ID}"
+      credentials_path: "${GCP_CREDENTIALS_PATH}"
+      # prefix: "processed/"
+
+# Validation Definitions
+validations:
+  # Row Count Validation
+  - name: "Customer Table Row Count"
+    type: row_count
+    enabled: true
+    source: spark_source
+    target: hive_target
+    source_query: "SELECT COUNT(*) FROM customers"
+    target_query: "SELECT COUNT(*) FROM processed.customers"
+    thresholds:
+      max_difference_percent: 0.1  # 0.1% tolerance
+      max_difference_absolute: 100  # Max 100 rows difference
+      fail_on_zero_source: true
+      fail_on_zero_target: true
+    metadata:
+      team: "data-engineering"
+      priority: "high"
+
+  # Data Quality Validation
+  - name: "Customer Data Quality"
+    type: data_quality
+    enabled: true
+    source: spark_source
+    target: hive_target
+    source_query: |
+      SELECT
+        customer_id,
+        email,
+        created_at
+      FROM customers
+      WHERE processing_date = '${PROCESSING_DATE}'
+    target_query: |
+      SELECT
+        customer_id,
+        email,
+        created_at
+      FROM processed.customers
+      WHERE processing_date = '${PROCESSING_DATE}'
+    thresholds:
+      max_null_percent: 5.0  # Max 5% nulls allowed
+      max_duplicate_percent: 1.0  # Max 1% duplicates
+      max_invalid_percent: 2.0  # Max 2% invalid records
+    metadata:
+      check_columns: ["customer_id", "email"]
+      primary_key: "customer_id"
+
+  # Schema Validation
+  - name: "Orders Table Schema"
+    type: schema
+    enabled: true
+    source: spark_source
+    target: hive_target
+    source_table: "orders"
+    target_table: "processed.orders"
+    thresholds: {}
+    metadata:
+      critical_columns: ["order_id", "customer_id", "order_date", "amount"]
+
+  # Business Rule Validation
+  - name: "Revenue Aggregation Check"
+    type: business_rule
+    enabled: false
+    source: spark_source
+    target: hive_target
+    source_query: "SELECT SUM(amount) as total FROM orders WHERE order_date = '${ORDER_DATE}'"
+    target_query: "SELECT SUM(revenue) as total FROM summary.daily_revenue WHERE date = '${ORDER_DATE}'"
+    thresholds:
+      max_difference_percent: 0.01  # 0.01% tolerance for financial data
+    metadata:
+      rule_type: "aggregation"
+      description: "Validate daily revenue aggregation"
+
+# Report Configuration
+reporters:
+  # JSON Reporter
+  - type: json
+    enabled: true
+    output_path: "output/json/validation_results.json"
+    config:
+      indent: 2
+      include_metadata: true
+
+  # HTML Reporter
+  - type: html
+    enabled: true
+    output_path: "output/reports/validation_report.html"
+    config:
+      include_charts: true
+      template: "templates/html_report_template.html"
+      show_passed_details: false
+
+  # Console Reporter
+  - type: console
+    enabled: true
+    config:
+      verbose: true
+      color_output: true
+
+  # Email Reporter
+  - type: email
+    enabled: false
+    config:
+      smtp_host: "${SMTP_HOST:smtp.gmail.com}"
+      smtp_port: ${SMTP_PORT:587}
+      sender: "${EMAIL_SENDER}"
+      recipients:
+        - "${EMAIL_RECIPIENT_1}"
+        - "${EMAIL_RECIPIENT_2}"
+      subject: "Validation Report - ${PROCESSING_DATE}"
+      use_tls: true
+      username: "${SMTP_USERNAME}"
+      password: "${SMTP_PASSWORD}"
+
+  # Database Reporter
+  - type: database
+    enabled: false
+    config:
+      connection_string: "${DB_CONNECTION_STRING}"
+      table_name: "validation_results"
+      schema: "monitoring"
+
+# Global Settings
+settings:
+  parallel_execution: false
+  max_workers: 4
+  log_level: "INFO"
+  log_file: "output/logs/validation.log"
+  continue_on_error: true
+  query_timeout_seconds: 300
+  connection_retry_attempts: 3
+  connection_retry_delay_seconds: 5
