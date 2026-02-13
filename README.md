@@ -373,7 +373,7 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Documentation: [Link to docs]
 - Issues: [GitHub Issues](https://github.com/yourusername/validation-framework/issues)
-- Email: your.email@example.com
+- Email: santoshayyappau@gmail.com
 
 ## Changelog
 
